@@ -12,6 +12,7 @@ async function init() {
     try {
         await pool.query(`CREATE TABLE images (
             imageID VARCHAR(36) PRIMARY KEY,
+            filename VARCHAR(255),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );`)
     } catch(e) {

@@ -56,8 +56,8 @@ app.post('/upload', async (req, res) => {
     const response = await minioClient.putObject(config.bucketName, id, image.data); 
 
     const query = {
-        text: 'INSERT INTO images VALUES($1)',
-        values: [id],
+        text: 'INSERT INTO images VALUES($1, $2)',
+        values: [id, image.name],
     }
 
     await db.pool.query(query);
@@ -69,9 +69,9 @@ app.post('/images', async (req, res) => {
     const page = req.body.page ?? 0; 
     console.log(req.body);
     const query = {
-        text: `SELECT imageID, count(*) OVER() AS full_count
+        text: `SELECT imageID, filename, count(*) OVER() AS full_count
         FROM   images
-        ORDER  BY created_at
+        ORDER  BY created_at DESC
         OFFSET $1
         LIMIT  $2`,
         values: [page*20, 20],
@@ -99,7 +99,9 @@ app.post('/images', async (req, res) => {
 
     const images = await Promise.all(promises);
 
-    outData.images = images;
+    outData.images = images.map((v, i) => {
+        return {name: data.rows[i].filename, image: v}
+    });
 
     res.send(outData).end();
 });
