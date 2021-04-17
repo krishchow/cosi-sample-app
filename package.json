@@ -1,0 +1,30 @@
+{
+  "name": "cosi-sample-app",
+  "version": "1.0.0",
+  "description": "This repository contains a sample application which consumes a bucket created by COSI",
+  "main": "app.js",
+  "scripts": {
+    "build": "docker build -t quay.io/krishchow/cosi-app:latest .",
+    "push": "docker push quay.io/krishchow/cosi-app:latest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/krishchow/cosi-sample-app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/krishchow/cosi-sample-app/issues"
+  },
+  "homepage": "https://github.com/krishchow/cosi-sample-app#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "directory-tree": "^2.2.5",
+    "express": "^4.17.1",
+    "express-fileupload": "^1.2.1",
+    "minio": "^7.0.18",
+    "pg": "^8.6.0",
+    "uuid": "^8.3.2"
+  }
+}
