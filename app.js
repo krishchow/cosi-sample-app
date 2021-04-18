@@ -6,10 +6,10 @@ const minio = require('minio')
 const fileUpload = require('express-fileupload');
 const v4 = require('uuid').v4;
 
-const db = require('./db');
-
 const PORT = process.env.PORT ?? 3000;
 const COSIPATH = process.env.MOUNT_PATH ?? "/data/cosi";
+
+const MAXDATE = new Date(8640000000000000);
 
 const credsFile = require(COSIPATH + '/credentials.json')
 const config = require(COSIPATH + '/protocolConn.json')
@@ -53,57 +53,74 @@ app.post('/upload', async (req, res) => {
 
     const id = v4();
 
-    const response = await minioClient.putObject(config.bucketName, id, image.data); 
+    const now = MAXDATE.valueOf() - Date.now()
 
-    const query = {
-        text: 'INSERT INTO images VALUES($1, $2)',
-        values: [id, image.name],
-    }
+    const object_key = `${now}:${id}:${image.name}`
 
-    await db.pool.query(query);
+    console.log(object_key);
 
-    res.send({response});
+    const response = await minioClient.putObject(config.bucketName, object_key, image.data);
+    // const response = 'hi';
+    res.send({ response });
 });
 
 app.post('/images', async (req, res) => {
-    const page = req.body.page ?? 0; 
-    console.log(req.body);
-    const query = {
-        text: `SELECT imageID, filename, count(*) OVER() AS full_count
-        FROM   images
-        ORDER  BY created_at DESC
-        OFFSET $1
-        LIMIT  $2`,
-        values: [page*20, 20],
+    let lastItem = "";
+    if (req.body.lastItem) {
+        lastItem = req.body.lastItem;
     }
 
-    const data = await db.pool.query(query);
+    const stream = minioClient.listObjectsV2(config.bucketName, "", false, lastItem);
 
-    if (data.rowCount == 0) {
-        res.status(404).end();
-        return;
-    }
+    const PAGE_SIZE = 20;
+    let current = 0;
+    const rows = [];
 
-    const outData = {
-        totalPages: Math.ceil(data.rows[0].full_count/20),
-        currentPage: page,
-    }
-
-    const promises = data.rows.map(async (row) => {
-        return minioClient.presignedGetObject(
-            config.bucketName,
-            row.imageid,
-            12*60*60,
-        )
+    stream.on('data', (obj) => {
+        if (current < PAGE_SIZE) {
+            rows.push(obj);
+        }
+        current += 1;
+        if (current == PAGE_SIZE) {
+            stream.destroy();
+        }
     });
 
-    const images = await Promise.all(promises);
+    stream.on('error', () => {
+        res.status(500).end();
+    })
 
-    outData.images = images.map((v, i) => {
-        return {name: data.rows[i].filename, image: v}
+    stream.on('close', async () => {
+        console.log(`finished reading ${rows.length} objects`);
+        console.log(rows);
+        if (rows.length === 0) {
+            res.status(404).end();
+            return
+        }
+
+        const promises = rows.map(async (row) => {
+            return minioClient.presignedGetObject(
+                config.bucketName,
+                row.name,
+                12 * 60 * 60,
+            )
+        });
+
+        const images = await Promise.all(promises);
+        
+        const outData = {
+            lastItem: rows[rows.length-1].name,
+        }
+
+        outData.images = images.map((v, i) => {
+            const name = rows[i].name.split(':').slice(2).join('')
+
+            return { name, image: v }
+        });
+
+        res.send(outData).end();
     });
 
-    res.send(outData).end();
 });
 
 app.get('*', (req, res) => {
@@ -111,6 +128,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, async () => {
-    await db.init();
     console.log(`Application started on ${PORT}`);
 });
